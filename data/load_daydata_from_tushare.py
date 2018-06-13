@@ -16,16 +16,26 @@ import jaqs.util as jutil
 import os
 import warnings
 import progressbar
+import datetime
 
 
 warnings.filterwarnings('ignore')
 
 
 def load_data():
-    "
+    """
     从tushare中下载数据, 首先下载所有数据的基础信息, 得到股票的上市时间
     判断h5文件中是否存在某个数据, 更新初始时间
-        "
+    """
+
+    temp_df = ts.get_k_data('000001', '', '', index=True)
+    tushare_last_date = temp_df.iat[-1, 0]
+
+    if datetime.datetime.strptime(last_date, '%Y-%m-%d') == datetime.datetime.strptime(tushare_last_date, '%Y-%m-%d'):
+        print "data is the latest!"
+        return
+
+    jutil.create_dir(os.path.join(dir_name, basics_name))
     stock_basics = ts.get_stock_basics()
     stock_basics = stock_basics[stock_basics['timeToMarket'] > 19000000]
     stock_basics.to_hdf(
@@ -41,19 +51,18 @@ def load_data():
     day_store = pd.HDFStore(os.path.join(dir_name, stock_name))
     time_delta = datetime.timedelta(1)
 
-    for i in progressba.progressbar(range(len(stock_basics))):
+    for i in progressbar.progressbar(range(len(stock_basics))):
         temp_code = code_index[i]
 
         if temp_code in already_load:
             temp_time = already_load[temp_code]
             temp_time = datetime.datetime.strptime(
                 time_time, '%Y-%m-%d') + time_delta
-            temp_time = temp_time.date()
+            temp_time = temp_time.date().isoformat()
         else:
             temp_time = ipodate.iat[i]
             temp_time = str(temp_time)
-            temp_time = temp_time[0:4] + '-' + \
-                temp_time[4:6] + '-' + temp_time[6:]
+            temp_time = datetime.datetime.strptime(temp_time,"%Y%m%d").date().isoformat()
 
         temp_df = ts.get_k_data(
             code=temp_code,
@@ -61,12 +70,14 @@ def load_data():
             end='',
             autype='qfq',
             ktype='D')
-        already_load[temp_code] = temp_df.tail(1).iat[0, 0]
+        already_load[temp_code] = temp_df.iat[-1, 0]
         day_store[temp_code] = temp_df
 
     config_dict['already_load'] = already_load
-    jutil.save_json(config_dict)
+    config_dict['last_date'] = tushare_last_date
+    jutil.save_json(config_dict, config_path)
     day_store.close()
+    print "last date to %s!" % tushare_last_date
 
 
 if __name__ == '__main__':
@@ -77,5 +88,6 @@ if __name__ == '__main__':
     basics_name = config_dict.get('basics_hdf', 'basics.h5')
     stock_name = config_dict.get('day_stock_hdf', 'day_stock.h5')
     already_load = config_dict.get('already_load', {})
+    last_date = config_dict.get('last_date', '1900-01-01')
 
     load_data()

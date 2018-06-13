@@ -11,9 +11,9 @@ from datetime import datetime, time
 from event import EventEngine2
 from trader.vtEvent import EVENT_LOG, EVENT_ERROR
 from trader.vtEngine import MainEngine, LogEngine
-from trader.gateway import ctpGateway
-from trader.app import ctaStrategy
-from trader.app.ctaStrategy.ctaBase import EVENT_CTA_LOG
+from gateway import ctpGateway
+from app import ctaStrategy
+from app.ctaStrategy.ctaBase import EVENT_CTA_LOG
 
 
 

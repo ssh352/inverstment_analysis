@@ -57,7 +57,7 @@ def load_data():
         if temp_code in already_load:
             temp_time = already_load[temp_code]
             temp_time = datetime.datetime.strptime(
-                time_time, '%Y-%m-%d') + time_delta
+                temp_time, '%Y-%m-%d') + time_delta
             temp_time = temp_time.date().isoformat()
         else:
             temp_time = ipodate.iat[i]
@@ -70,8 +70,12 @@ def load_data():
             end='',
             autype='qfq',
             ktype='D')
+        
+        if temp_df.empty:
+            continue
+
         already_load[temp_code] = temp_df.iat[-1, 0]
-        day_store[temp_code] = temp_df
+        day_store[temp_code] = pd.concat([day_store[temp_code],temp_df])
 
     config_dict['already_load'] = already_load
     config_dict['last_date'] = tushare_last_date

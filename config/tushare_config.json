@@ -1,5 +1,6 @@
 {
 "basics_hdf": "basics.h5",
-"dirname": "/data/zhangkai_data/",
+"dirname": "/data/zhangkai_data/tushare",
 "stock_name": "day_stock.h5"
+
 }

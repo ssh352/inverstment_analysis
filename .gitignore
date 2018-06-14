@@ -104,4 +104,4 @@ venv.bak/
 .mypy_cache/
 
 # tushare config is different
-config/tushare_config.json
+tushare_config.json

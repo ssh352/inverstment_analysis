@@ -29,7 +29,10 @@ def get_first_part():
     temp_html = temp_html.find_all('td',{"class":"arial12black"})
 
     first_dict = {}
-    first_dict['last_date'] = temp_html[1].get_text().strip()
+    temp_string = temp_html[1].get_text().strip()
+    temp_string = datetime.datetime.strptime(temp_string,"%d/%m/%Y")
+    temp_string = temp_string.strftime("%Y-%m-%d")
+    first_dict['last_date'] = temp_string
     first_dict['stock_code'] = temp_html[3].get_text().strip()
     first_dict['stock_name'] = temp_html[5].get_text().strip()
 
@@ -87,7 +90,7 @@ def get_third_part(first_dict):
     time_span = pd.Timestamp(last_date)
     new_pd.index = [time_span]
 
-    temp_string = datetime.datetime.strptime(last_date,'%d/%m/%Y')
+    temp_string = datetime.datetime.strptime(last_date,'%Y-%m-%d')
     end_date = temp_string.date()
     start_date = end_date - datetime.timedelta(10)
 
@@ -146,6 +149,17 @@ def save_to_excel(first_dict,second_dict,merge_pd):
     wb.save('test.xlsx')
     print("数据已写入excel中!")
 
+def plot_10(merge_pd):
+    '''
+    画前10大持仓股的曲线图
+    '''
+    temp_pd = merge_pd.sort_values(merge_pd.index[0],axis=1,ascendind=False)
+    
+    number = min(10,len(merge_pd))
+    
+    for i=0:range(number):
+        temp_pd.
+        pass
 def save_to_config():
 
     first_dict = get_first_part()
@@ -159,6 +173,7 @@ def save_to_config():
     second_dict = get_second_part()
     third_pd = get_third_part(first_dict)
     merge_pd = third_pd.append(old_pd)
+    merge_pd = merge_pd.sort_index(ascending=False)
 
     config_dict['name_dict'] = name_dict
     config_dict['close_data'] = close_data
@@ -173,7 +188,7 @@ def save_to_config():
     with open('config.json','w',encoding='utf-8') as f:
         json.dump(config_dict,f)
 
-    print('数据更新至%s!' % last_date)
+    print('数据更新至%s!' % merge_pd.index[0])
 
 if __name__ == '__main__':
 

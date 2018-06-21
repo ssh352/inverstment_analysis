@@ -59,10 +59,12 @@ def load_data():
             temp_time = datetime.datetime.strptime(
                 temp_time, '%Y-%m-%d') + time_delta
             temp_time = temp_time.date().isoformat()
+            temp_data = day_store[temp_code]
         else:
             temp_time = ipodate.iat[i]
             temp_time = str(temp_time)
             temp_time = datetime.datetime.strptime(temp_time,"%Y%m%d").date().isoformat()
+            temp_data = pd.DataFrame()
 
         temp_df = ts.get_k_data(
             code=temp_code,
@@ -75,7 +77,7 @@ def load_data():
             continue
 
         already_load[temp_code] = temp_df.iat[-1, 0]
-        day_store[temp_code] = pd.concat([day_store[temp_code],temp_df])
+        day_store[temp_code] = pd.concat([temp_data,temp_df])
 
     config_dict['already_load'] = already_load
     config_dict['last_date'] = tushare_last_date

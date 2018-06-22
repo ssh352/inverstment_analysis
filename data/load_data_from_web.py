@@ -16,6 +16,94 @@ import os
 from collections import OrderedDict
 import datetime
 import json
+import wx
+
+
+def update(event):
+    '''
+    更新数据
+    '''
+    begin_date = ui_begin_date.GetValue()
+    begin_date = begin_date[0:4] + '-' + begin_date[4:6] + '-' + begin_date[6:8]
+    end_date = ui_end_date.GetValue()
+    end_date = end_date[0:4] + '-' + end_date[4:6] + '-' + end_date[6:8]
+
+    already_begin_date = config_dict.get('already_begin_date',begin_date)
+    already_end_date = config_dict.get('already_end_date',end_date)
+
+    date_range = get_date_range(begin_date,end_date,already_end_date,already_end_date)
+    trade_cal = config_dict['trade_cal']
+    trade_cal = trade_cal[trade_cal['calendarDate'] >= begin_date]
+    trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
+    trade_cal = trade_cal[trade_cal['isOpen'] == 1]
+    trade_cal = trade_cal['calendarDate']
+
+    for temp_time in trade_cal:
+
+        if temp_time in every_day_data:
+            continue
+    
+        select = Select(browser.find_element_by_name('ddlShareholdingMonth'))
+        select.select_by_value(temp_time[5:7])
+
+        select = Select(browser.find_element_by_name('ddlShareholdingDay'))
+        select.select_by_value(temp_time[8:10])
+
+        select = Select(browser.find_element_by_name('ddlShareholdingYear'))
+        select.select_by_value(temp_time[0:4])
+
+        element = browser.find_element_by_id("txtStockCode")
+        element.send_keys("91888")
+
+        browser.find_element_by_id("btnSearch").click()
+
+        html_txt = browser.page_source
+
+        soup = BeautifulSoup(html_txt,'html.parser')
+
+        first_part = get_first_part(soup)
+        second_dict = get_second_part(soup)
+        third_pd = get_third_part(first_dict)
+
+        merge_pd = third_pd.append(old_pd)
+        merge_pd = merge_pd.sort_index(ascending=False)
+
+        config_dict['name_dict'] = name_dict
+        config_dict['close_data'] = close_data
+        config_dict[last_date] = [first_dict,second_dict,third_pd.to_json()]
+        config_dict['old_pd'] = merge_pd.to_json()
+        config_dict['first_dict'] = first_dict
+        config_dict['second_dict'] = second_dict
+        config_dict['third_pd'] = third_pd.to_json()
+    
+    print(get_first_part())
+
+    browser.back() 
+
+    contents.SetValue(temp_string)
+
+def get_date_range(begin_date,end_date,already_begin_date,already_end_date):
+    '''
+    计算最终要爬取的日期区间
+    '''
+    begin_date = datetime.datetime.strptime(begin_date,'%Y-%m-%d')
+    end_date = datetime.datetime.strptime(end_date,'%Y-%m-%d')
+    already_begin_date = datetime.datetime.strptime(already_begin_date,'%Y-%m-%d')
+    already_end_date = datetime.datetime.strptime(already_end_date,'%Y-%m-%d')
+
+    trade_cal = config_dict['trade_cal']
+    trade_cal = trade_cal[trade_cal['calendarDate'] >= begin_date]
+    trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
+    trade_cal = trade_cal[trade_cal['isOpen'] == 1]
+    trade_cal = trade_cal['calendarDate']
+
+def write_to_excel(event):
+    '''
+    写入excel中
+    '''
+
+    pass
+
 
 
 def load_from_local():
@@ -190,23 +278,51 @@ def save_to_config():
 
     print('数据更新至%s!' % merge_pd.index[0])
 
-if __name__ == '__main__':
 
+def init():
+    '''初始化'''
     if os.path.exists('config.json'):
         with open('config.json','r',encoding='utf-8') as f:
             config_dict = json.load(f)
-            name_dict = config_dict.get('name_dict',{})
-            close_data = config_dict.get('close_data',{})
-            old_pd = config_dict['old_pd']
-            old_pd = pd.read_json(old_pd)
+            #  name_dict = config_dict.get('name_dict',{})
+            #  close_data = config_dict.get('close_data',{})
+            #  old_pd = config_dict['old_pd']
+            #  old_pd = pd.read_json(old_pd)
     else:
-        config_dict = {}
-        name_dict = {}
-        close_data = {}
-        old_pd = pd.DataFrame()
+        config_dict = {'close_data':}
+        
+        #  name_dict = {}
+        #  close_data = {}
+        #  old_pd = pd.DataFrame()
 
-    html_txt = load_from_local()
-    soup = BeautifulSoup(html_txt,'html.parser')
+    #  html_txt = load_from_local()
+    #  soup = BeautifulSoup(html_txt,'html.parser')
+    #
+    #  save_to_config()
 
-    save_to_config()
+    return config_dict
 
+if __name__ == '__main__':
+
+    init()
+
+    app = wx.App()
+
+    win = wx.Frame(None,title="simple editor",size=(410,335))
+
+    begin_button = wx.Button(win,label='更新数据',pos=(225,10),size=(80,45))
+    begin_button.Bind(wx.EVT_BUTTON,update)
+    save_button = wx.Button(win,label='写入excle',pos=(315,10),size=(80,45))
+    save_button.Bind(wx.EVT_BUTTON,write_to_excel)
+
+    ui_label1 = wx.StaticText(win, label = "起始日期", pos = (5,5)) 
+    ui_label2 = wx.StaticText(win, label = "终止日期", pos = (5,35)) 
+
+    ui_begin_date = wx.TextCtrl(win,pos=(60,5),size=(150,25))
+    ui_end_date = wx.TextCtrl(win,pos=(60,35),size=(150,25))
+
+    contents = wx.TextCtrl(win,pos=(5,70),size=(390,260),style=wx.TE_MULTILINE |
+                           wx.HSCROLL)
+
+    win.Show()
+    app.MainLoop()

@@ -17,12 +17,24 @@ from collections import OrderedDict
 import datetime
 import json
 import wx
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
 
+url = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
 
 def update(event):
     '''
     更新数据
     '''
+    name_dict = config_dict.get('name_dict',{})
+    first_all_data = config_dict['first_all_data']
+    first_all_data = pd.read_json(first_all_data)
+    second_all_data = config_dict['second_all_data']
+    second_all_data = pd.read_json(second_all_data)
+
     begin_date = ui_begin_date.GetValue()
     begin_date = begin_date[0:4] + '-' + begin_date[4:6] + '-' + begin_date[6:8]
     end_date = ui_end_date.GetValue()
@@ -31,16 +43,19 @@ def update(event):
     already_begin_date = config_dict.get('already_begin_date',begin_date)
     already_end_date = config_dict.get('already_end_date',end_date)
 
-    date_range = get_date_range(begin_date,end_date,already_end_date,already_end_date)
     trade_cal = config_dict['trade_cal']
+    trade_cal = pd.read_json(trade_cal)
     trade_cal = trade_cal[trade_cal['calendarDate'] >= begin_date]
     trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
     trade_cal = trade_cal[trade_cal['isOpen'] == 1]
     trade_cal = trade_cal['calendarDate']
 
+    browser = webdriver.Chrome()
+    browser.get(url)
+
     for temp_time in trade_cal:
 
-        if temp_time in every_day_data:
+        if temp_time in config_dict:
             continue
     
         select = Select(browser.find_element_by_name('ddlShareholdingMonth'))
@@ -61,57 +76,41 @@ def update(event):
 
         soup = BeautifulSoup(html_txt,'html.parser')
 
-        first_part = get_first_part(soup)
-        second_dict = get_second_part(soup)
-        third_pd = get_third_part(first_dict)
+        first_part = get_first_part(soup,temp_time)
+        second_part = get_second_part(soup)
+        second_part.index = [temp_time]
+        first_all_data = first_part.append(first_all_data) 
+        second_all_data = second_part.append(second_all_data) 
 
-        merge_pd = third_pd.append(old_pd)
-        merge_pd = merge_pd.sort_index(ascending=False)
+        config_dict[temp_time] = [first_part.to_json(),second_part.to_json()] 
+        browser.back() 
 
-        config_dict['name_dict'] = name_dict
-        config_dict['close_data'] = close_data
-        config_dict[last_date] = [first_dict,second_dict,third_pd.to_json()]
-        config_dict['old_pd'] = merge_pd.to_json()
-        config_dict['first_dict'] = first_dict
-        config_dict['second_dict'] = second_dict
-        config_dict['third_pd'] = third_pd.to_json()
     
-    print(get_first_part())
+    first_all_data = first_all_data.sort_index(ascending=False)
+    second_all_data = second_all_data.sort_index(ascending=False)
 
-    browser.back() 
+    already_begin_date = first_all_data.index[-1]
+    already_end_date = first_all_data.index[0]
+    close_data = ts.get_k_data('601888',start=already_begin_date,end=already_end_date)
 
-    contents.SetValue(temp_string)
+    config_dict['name_dict'] = name_dict
+    config_dict['close_data'] = close_data.to_json()
+    config_dict['already_begin_date'] = already_begin_date 
+    config_dict['already_end_date'] = already_end_date
+    config_dict['first_all_data'] = first_all_data.to_json()
+    config_dict['second_all_data'] = second_all_data.to_json()
 
-def get_date_range(begin_date,end_date,already_begin_date,already_end_date):
-    '''
-    计算最终要爬取的日期区间
-    '''
-    begin_date = datetime.datetime.strptime(begin_date,'%Y-%m-%d')
-    end_date = datetime.datetime.strptime(end_date,'%Y-%m-%d')
-    already_begin_date = datetime.datetime.strptime(already_begin_date,'%Y-%m-%d')
-    already_end_date = datetime.datetime.strptime(already_end_date,'%Y-%m-%d')
+    with open('config.json','w',encoding='utf-8') as f:
+        json.dump(config_dict,f)
 
-    trade_cal = config_dict['trade_cal']
-    trade_cal = trade_cal[trade_cal['calendarDate'] >= begin_date]
-    trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
-    trade_cal = trade_cal[trade_cal['isOpen'] == 1]
-    trade_cal = trade_cal['calendarDate']
-
-def write_to_excel(event):
-    '''
-    写入excel中
-    '''
-
-    pass
-
-
+    print('数据从%s至%s!' % (already_begin_date,already_end_date))
 
 def load_from_local():
     
     with open('__ HKEX __ HKEXnews __.html','r',encoding="utf-8") as f:
         return f.read()
 
-def get_first_part():
+def get_first_part(soup,temp_time):
 
     temp_html = soup.find("table",{"id":"Table5"})
     temp_html = temp_html.find_all('td',{"class":"arial12black"})
@@ -120,27 +119,24 @@ def get_first_part():
     temp_string = temp_html[1].get_text().strip()
     temp_string = datetime.datetime.strptime(temp_string,"%d/%m/%Y")
     temp_string = temp_string.strftime("%Y-%m-%d")
-    first_dict['last_date'] = temp_string
+    #  first_dict['last_date'] = temp_string
     first_dict['stock_code'] = temp_html[3].get_text().strip()
     first_dict['stock_name'] = temp_html[5].get_text().strip()
-
-    return first_dict
-
-def get_second_part():
 
     temp_html = soup.find("div",{"id":{"pnlResultSummary"}})
     temp_html = temp_html.find_all("span",{"class":"mobilezoom"})
 
-    second_dict = {}
-    second_dict['hold_volumn'] = temp_html[0].get_text().strip()
-    second_dict['people_number'] = temp_html[1].get_text().strip()
-    second_dict['hold_precent'] = temp_html[2].get_text().strip()
-    second_dict['all_volumn'] = temp_html[6].get_text().strip()
+    first_dict = {}
+    first_dict['hold_volumn'] = temp_html[0].get_text().strip()
+    first_dict['people_number'] = temp_html[1].get_text().strip()
+    first_dict['hold_precent'] = temp_html[2].get_text().strip()
+    first_dict['all_volumn'] = temp_html[6].get_text().strip()
 
-    return second_dict
+    return pd.DataFrame(first_dict,index=[temp_time])
 
-def get_third_part(first_dict):
+def get_second_part(soup):
 
+    name_dict = config_dict.get('name_dict',{})
     temp_html = soup.find("table",{"id":{"participantShareholdingList"}})
     temp_html = temp_html.find_all('tr')
 
@@ -174,65 +170,57 @@ def get_third_part(first_dict):
     new_pd = new_pd.T
     new_pd.columns = last_pd[0]
 
-    last_date = first_dict['last_date']
-    time_span = pd.Timestamp(last_date)
-    new_pd.index = [time_span]
-
-    temp_string = datetime.datetime.strptime(last_date,'%Y-%m-%d')
-    end_date = temp_string.date()
-    start_date = end_date - datetime.timedelta(10)
-
-    temp_df = ts.get_k_data('601888',start=start_date.isoformat(),end=end_date.isoformat())
-
-    if temp_df.empty:
-        #  close_data[last_date] = list(close_data.values())[-1]
-        close_data[str(time_span)] = 0 
-    else:
-        close_data[str(time_span)] = temp_df.iat[-1,2]
-
     return new_pd
 
-def save_to_excel(first_dict,second_dict,merge_pd):
+def write_to_excel(event):
+    '''
+    把数据写入excle中
+    '''
+    name_dict = config_dict.get('name_dict',{})
+    first_all_data = config_dict['first_all_data']
+    first_all_data = pd.read_json(first_all_data)
+    second_all_data = config_dict['second_all_data']
+    second_all_data = pd.read_json(second_all_data)
+    close_data = config_dict['close_data']
+    close_data = pd.read_json(close_data)
+    close_data = close_data['close']
+    hold_volumn = first_all_data['hold_volumn']
+    people_number = first_all_data['people_number']
+    hold_precent = first_all_data['hold_precent']
+    all_volumn = first_all_data['all_volumn']
 
     wb = oxl.Workbook()
     ws = wb.create_sheet(index=0,title='oxl-sheet')
-    
-    ws.cell(row=1,column=1).value = '持股日期'
-    ws.cell(row=1,column=2).value = first_dict['last_date']
-    ws.cell(row=1,column=3).value = '股票代码'
-    ws.cell(row=1,column=4).value = first_dict['stock_code']
-    ws.cell(row=1,column=5).value = '股票名称'
-    ws.cell(row=1,column=6).value = first_dict['stock_name']
 
-    ws.cell(row=3,column=1).value = '中央结算系统持股量'
-    ws.cell(row=4,column=1).value = second_dict['hold_volumn']
-    ws.cell(row=3,column=2).value = '参与者数目'
-    ws.cell(row=4,column=2).value = second_dict['people_number']
-    ws.cell(row=3,column=3).value = '总数百分比'
-    ws.cell(row=4,column=3).value = second_dict['hold_precent']
-    ws.cell(row=3,column=4).value = '全部持股量'
-    ws.cell(row=4,column=4).value = second_dict['all_volumn']
-
-    columns = merge_pd.columns
-    index = merge_pd.index
-    
+    columns = second_all_data.columns
+    index = first_all_data.index
     row_number = len(index)
     col_number = len(columns)
-
-    ws.cell(row=8,column=1).value = '日期'
-    ws.cell(row=8,column=2).value = '收盘价'
-
+    
+    ws.cell(row=2,column=1).value = '日期'
+    ws.cell(row=2,column=2).value = '收盘价'
+    #  ws.cell(row=2,column=3).value = '股票代码'
+    #  ws.cell(row=2,column=4).value = '股票名称'
+    ws.cell(row=2,column=3).value = '中央结算系统持股量'
+    ws.cell(row=2,column=4).value = '参与者数目'
+    ws.cell(row=2,column=5).value = '总数百分比'
+    ws.cell(row=2,column=6).value = '全部持股量'
+    
     for i in range(row_number):
-        ws.cell(row=i+9,column=1).value = str(index[i])[0:10]
-        ws.cell(row=i+9,column=2).value = close_data.get(str(index[i]),0)
+        ws.cell(row=i+3,column=1).value = str(index[i])[0:10]
+        ws.cell(row=i+3,column=2).value = close_data.iat[i]
+        ws.cell(row=i+3,column=3).value = hold_volumn.iat[i]
+        ws.cell(row=i+3,column=4).value = people_number.iat[i]
+        ws.cell(row=i+3,column=5).value = hold_precent.iat[i]
+        ws.cell(row=i+3,column=6).value = all_volumn.iat[i]
 
     for i in range(col_number):
-        ws.cell(row=8,column=i+3).value = columns[i]
-        ws.cell(row=7,column=i+3).value = name_dict[columns[i]] 
+        ws.cell(row=2,column=i+7).value = columns[i]
+        ws.cell(row=1,column=i+7).value = name_dict[columns[i]] 
 
     for i in range(row_number):
         for j in range(col_number):
-            ws.cell(row=9+i,column=j+3).value = merge_pd.iat[i,j]
+            ws.cell(row=3+i,column=j+7).value = second_all_data.iat[i,j]
 
     wb.save('test.xlsx')
     print("数据已写入excel中!")
@@ -245,9 +233,9 @@ def plot_10(merge_pd):
     
     number = min(10,len(merge_pd))
     
-    for i=0:range(number):
-        temp_pd.
+    for i in range(number):
         pass
+
 def save_to_config():
 
     first_dict = get_first_part()
@@ -259,17 +247,17 @@ def save_to_config():
         return
 
     second_dict = get_second_part()
-    third_pd = get_third_part(first_dict)
-    merge_pd = third_pd.append(old_pd)
+    second_pd = get_second_part(first_dict)
+    merge_pd = second_pd.append(old_pd)
     merge_pd = merge_pd.sort_index(ascending=False)
 
     config_dict['name_dict'] = name_dict
     config_dict['close_data'] = close_data
-    config_dict[last_date] = [first_dict,second_dict,third_pd.to_json()]
+    config_dict[last_date] = [first_dict,second_dict,second_pd.to_json()]
     config_dict['old_pd'] = merge_pd.to_json()
     config_dict['first_dict'] = first_dict
     config_dict['second_dict'] = second_dict
-    config_dict['third_pd'] = third_pd.to_json()
+    config_dict['second_pd'] = second_pd.to_json()
 
     save_to_excel(first_dict,second_dict,merge_pd)
     
@@ -280,31 +268,28 @@ def save_to_config():
 
 
 def init():
-    '''初始化'''
+    '''
+    初始化数据变量
+    '''
     if os.path.exists('config.json'):
         with open('config.json','r',encoding='utf-8') as f:
             config_dict = json.load(f)
-            #  name_dict = config_dict.get('name_dict',{})
-            #  close_data = config_dict.get('close_data',{})
-            #  old_pd = config_dict['old_pd']
-            #  old_pd = pd.read_json(old_pd)
+            print("当前拥有数据区间为%s至%s" % (config_dict['already_begin_date'],config_dict['already_end_date']))
     else:
-        config_dict = {'close_data':}
-        
-        #  name_dict = {}
-        #  close_data = {}
-        #  old_pd = pd.DataFrame()
-
-    #  html_txt = load_from_local()
-    #  soup = BeautifulSoup(html_txt,'html.parser')
-    #
-    #  save_to_config()
+        config_dict = {}
+        config_dict['trade_cal'] = ts.trade_cal().to_json()
+        config_dict['name_dict'] = {}
+        first_all_data = pd.DataFrame()
+        config_dict['first_all_data'] = first_all_data.to_json()
+        second_all_data = pd.DataFrame()
+        config_dict['second_all_data'] = second_all_data.to_json()
+        print("当前未拥有任何数据")
 
     return config_dict
 
 if __name__ == '__main__':
 
-    init()
+    config_dict = init()
 
     app = wx.App()
 

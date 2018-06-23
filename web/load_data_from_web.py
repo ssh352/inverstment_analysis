@@ -32,21 +32,19 @@ def update(event):
     '''
     更新数据
     '''
+    begin_date = ui_begin_date.GetValue()
+    end_date = ui_end_date.GetValue()
+
+    if len(begin_date) != 10 and len(end_date) != 10:
+        #  contents.SetValue("日期格式不对,请参照:20180101填写")
+        contents.AppendText("日期格式不对,请参照:20180101填写\n")
+        return None
+
     name_dict = config_dict.get('name_dict',{})
     first_all_data = config_dict['first_all_data']
     first_all_data = pd.read_json(first_all_data)
     second_all_data = config_dict['second_all_data']
     second_all_data = pd.read_json(second_all_data)
-
-    begin_date = ui_begin_date.GetValue()
-    end_date = ui_end_date.GetValue()
-
-    if len(begin_date) != 8 and len(end_date) != 8:
-        contents.SetValue("日期格式不对,请参照:20180101填写")
-        return None
-
-    begin_date = begin_date[0:4] + '-' + begin_date[4:6] + '-' + begin_date[6:8]
-    end_date = end_date[0:4] + '-' + end_date[4:6] + '-' + end_date[6:8]
 
     already_begin_date = config_dict.get('already_begin_date',begin_date)
     already_end_date = config_dict.get('already_end_date',end_date)
@@ -58,6 +56,9 @@ def update(event):
     trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
     trade_cal = trade_cal[trade_cal['isOpen'] == 1]
     trade_cal = trade_cal['calendarDate']
+
+    #  contents.SetValue('开始下载数据...........')
+    contents.AppendText('开始下载数据...........\n')
 
     browser = webdriver.Chrome()
     browser.get(url)
@@ -113,7 +114,8 @@ def update(event):
     with open('config.json','w',encoding='utf-8') as f:
         json.dump(config_dict,f)
 
-    contents.SetValue('更新数据区间为:%s至%s!' % (already_begin_date,already_end_date))
+    #  contents.SetValue('更新数据区间完成!')
+    contents.AppendText('更新数据区间完成!\n')
 
 def load_from_local():
     
@@ -241,7 +243,8 @@ def write_to_excel(event):
             ws.cell(row=3+i,column=j+7).value = second_all_data.iat[i,j]
 
     wb.save('test.xlsx')
-    contents.SetValue(r"数据已写入excel中!")
+    #  contents.SetValue(r"数据已写入excel中!")
+    contents.AppendText("数据已写入excel中!\n")
 
 def get_close_data():
     '''
@@ -308,18 +311,53 @@ def plot_10(event):
         plt.title(temp_col.name)
         plt.savefig(str(i)+'.png')
     
-    contents.SetValue(r"画图成功!")
+    #  contents.SetValue(r"画图成功!")
+    contents.AppendText("画图成功!\n")
+
+def ui_end_date_evt_text(event):
+    '''
+    起始输入日期的回调函数
+    '''
+    temp_string = ui_end_date.GetValue()
+
+    if len(temp_string) == 8:
+        temp_string = temp_string[0:4] + '-' + temp_string[4:6] + '-' + temp_string[6:8]
+        temp_string = datetime.datetime.strptime(temp_string,"%Y-%m-%d").date()
+        if temp_string > max_date:
+            #  contents.SetValue("输入的日期小于最早可以得到的数据,网站最早可以得到1年以前的数据")
+            contents.AppendText("输入的日期大于最晚可以得到的数据\n")
+            temp_string = max_date
+        ui_end_date.SetValue(temp_string.isoformat())
+
+def ui_begin_date_evt_text(event):
+    '''
+    最终日期的回掉函数
+    '''
+    temp_string = ui_begin_date.GetValue()
+
+    if len(temp_string) == 8:
+        temp_string = temp_string[0:4] + '-' + temp_string[4:6] + '-' + temp_string[6:8]
+        temp_string = datetime.datetime.strptime(temp_string,"%Y-%m-%d").date()
+        if temp_string < min_date:
+            #  contents.SetValue("输入的日期小于最早可以得到的数据,网站最早可以得到1年以前的数据")
+            contents.AppendText("输入的日期小于最早可以得到的数据\n")
+            temp_string = min_date
+        ui_begin_date.SetValue(temp_string.isoformat())
+
 
 def init():
     '''
     初始化数据变量
     '''
+    contents.AppendText('日期格式的填写为:20180101\n')
+    contents.AppendText('网站当前可以下载的时间区间为:%s至%s\n' % (min_date.isoformat(),max_date.isoformat()))
+    ui_begin_date.SetValue(min_date.isoformat())
+    ui_end_date.SetValue(max_date.isoformat())
     if os.path.exists('config.json'):
         with open('config.json','r',encoding='utf-8') as f:
             config_dict = json.load(f)
-            contents.SetValue(r"当前数据区间为:%s至%s" % (config_dict['already_begin_date'],config_dict['already_end_date']))
-            ui_begin_date.SetValue(config_dict['already_begin_date'])
-            ui_end_date.SetValue(config_dict['already_end_date'])
+            #  contents.SetValue(r"当前数据区间为:%s至%s" % (config_dict['already_begin_date'],config_dict['already_end_date']))
+            contents.AppendText("当前拥有数据区间为:%s至%s\n" % (config_dict['already_begin_date'],config_dict['already_end_date']))
     else:
         config_dict = {}
         config_dict['trade_cal'] = ts.trade_cal().to_json()
@@ -328,15 +366,20 @@ def init():
         config_dict['first_all_data'] = first_all_data.to_json()
         second_all_data = pd.DataFrame()
         config_dict['second_all_data'] = second_all_data.to_json()
-        contents.SetValue(r"当前未拥有任何数据")
+        #  contents.SetValue(r"当前未拥有任何数据")
+        contents.AppendText("当前未拥有任何数据\n")
 
     return config_dict
 
 if __name__ == '__main__':
 
+    today_date = datetime.date.today()
+    max_date = today_date - datetime.timedelta(1)
+    min_date = datetime.date(today_date.year-1,today_date.month,today_date.day)
+
     app = wx.App()
 
-    win = wx.Frame(None,title="simple editor",size=(430,200))
+    win = wx.Frame(None,title="simple editor",size=(430,300))
 
     begin_button = wx.Button(win,label='更新数据',pos=(160,10),size=(60,45))
     begin_button.Bind(wx.EVT_BUTTON,update)
@@ -349,9 +392,11 @@ if __name__ == '__main__':
     ui_label2 = wx.StaticText(win, label = "终止日期", pos = (5,35)) 
 
     ui_begin_date = wx.TextCtrl(win,pos=(60,5),size=(90,25))
+    ui_begin_date.Bind(wx.EVT_TEXT,ui_begin_date_evt_text)
     ui_end_date = wx.TextCtrl(win,pos=(60,35),size=(90,25))
+    ui_end_date.Bind(wx.EVT_TEXT,ui_end_date_evt_text)
 
-    contents = wx.TextCtrl(win,pos=(5,70),size=(390,80),style=rt.RE_READONLY)
+    contents = wx.TextCtrl(win,pos=(5,70),size=(390,180),style=rt.RE_READONLY | wx.TE_MULTILINE)
     config_dict = init()
 
     win.Show()

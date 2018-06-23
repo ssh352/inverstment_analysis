@@ -17,11 +17,14 @@ from collections import OrderedDict
 import datetime
 import json
 import wx
+import wx.richtext as rt
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
+import matplotlib.pyplot as plt
+import numpy as np
 
 url = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
 
@@ -36,8 +39,13 @@ def update(event):
     second_all_data = pd.read_json(second_all_data)
 
     begin_date = ui_begin_date.GetValue()
-    begin_date = begin_date[0:4] + '-' + begin_date[4:6] + '-' + begin_date[6:8]
     end_date = ui_end_date.GetValue()
+
+    if len(begin_date) != 8 and len(end_date) != 8:
+        contents.SetValue("日期格式不对,请参照:20180101填写")
+        return None
+
+    begin_date = begin_date[0:4] + '-' + begin_date[4:6] + '-' + begin_date[6:8]
     end_date = end_date[0:4] + '-' + end_date[4:6] + '-' + end_date[6:8]
 
     already_begin_date = config_dict.get('already_begin_date',begin_date)
@@ -45,6 +53,7 @@ def update(event):
 
     trade_cal = config_dict['trade_cal']
     trade_cal = pd.read_json(trade_cal)
+    trade_cal = trade_cal.sort_index()
     trade_cal = trade_cal[trade_cal['calendarDate'] >= begin_date]
     trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
     trade_cal = trade_cal[trade_cal['isOpen'] == 1]
@@ -77,8 +86,7 @@ def update(event):
         soup = BeautifulSoup(html_txt,'html.parser')
 
         first_part = get_first_part(soup,temp_time)
-        second_part = get_second_part(soup)
-        second_part.index = [temp_time]
+        second_part = get_second_part(soup,temp_time)
         first_all_data = first_part.append(first_all_data) 
         second_all_data = second_part.append(second_all_data) 
 
@@ -86,11 +94,13 @@ def update(event):
         browser.back() 
 
     
+    browser.close()
     first_all_data = first_all_data.sort_index(ascending=False)
     second_all_data = second_all_data.sort_index(ascending=False)
+    second_all_data = second_all_data.fillna(0)
 
-    already_begin_date = first_all_data.index[-1]
-    already_end_date = first_all_data.index[0]
+    already_begin_date = first_all_data.index[-1].date().isoformat()
+    already_end_date = first_all_data.index[0].date().isoformat()
     close_data = ts.get_k_data('601888',start=already_begin_date,end=already_end_date)
 
     config_dict['name_dict'] = name_dict
@@ -103,7 +113,7 @@ def update(event):
     with open('config.json','w',encoding='utf-8') as f:
         json.dump(config_dict,f)
 
-    print('数据从%s至%s!' % (already_begin_date,already_end_date))
+    contents.SetValue('更新数据区间为:%s至%s!' % (already_begin_date,already_end_date))
 
 def load_from_local():
     
@@ -132,9 +142,9 @@ def get_first_part(soup,temp_time):
     first_dict['hold_precent'] = temp_html[2].get_text().strip()
     first_dict['all_volumn'] = temp_html[6].get_text().strip()
 
-    return pd.DataFrame(first_dict,index=[temp_time])
+    return pd.DataFrame(first_dict,index=[pd.Timestamp(temp_time)])
 
-def get_second_part(soup):
+def get_second_part(soup,temp_time):
 
     name_dict = config_dict.get('name_dict',{})
     temp_html = soup.find("table",{"id":{"participantShareholdingList"}})
@@ -169,6 +179,7 @@ def get_second_part(soup):
     new_pd = pd.DataFrame(last_pd[3])
     new_pd = new_pd.T
     new_pd.columns = last_pd[0]
+    new_pd.index = [pd.Timestamp(temp_time)]
 
     return new_pd
 
@@ -179,15 +190,22 @@ def write_to_excel(event):
     name_dict = config_dict.get('name_dict',{})
     first_all_data = config_dict['first_all_data']
     first_all_data = pd.read_json(first_all_data)
+    
     second_all_data = config_dict['second_all_data']
     second_all_data = pd.read_json(second_all_data)
+
     close_data = config_dict['close_data']
     close_data = pd.read_json(close_data)
     close_data = close_data['close']
+
     hold_volumn = first_all_data['hold_volumn']
     people_number = first_all_data['people_number']
     hold_precent = first_all_data['hold_precent']
     all_volumn = first_all_data['all_volumn']
+
+    first_all_data = first_all_data.sort_index(ascending=False)
+    second_all_data = second_all_data.sort_index(ascending=False)
+    close_data = close_data.sort_index(ascending=False)
 
     wb = oxl.Workbook()
     ws = wb.create_sheet(index=0,title='oxl-sheet')
@@ -207,7 +225,7 @@ def write_to_excel(event):
     ws.cell(row=2,column=6).value = '全部持股量'
     
     for i in range(row_number):
-        ws.cell(row=i+3,column=1).value = str(index[i])[0:10]
+        ws.cell(row=i+3,column=1).value = index[i].date().isoformat()
         ws.cell(row=i+3,column=2).value = close_data.iat[i]
         ws.cell(row=i+3,column=3).value = hold_volumn.iat[i]
         ws.cell(row=i+3,column=4).value = people_number.iat[i]
@@ -223,49 +241,74 @@ def write_to_excel(event):
             ws.cell(row=3+i,column=j+7).value = second_all_data.iat[i,j]
 
     wb.save('test.xlsx')
-    print("数据已写入excel中!")
+    contents.SetValue(r"数据已写入excel中!")
 
-def plot_10(merge_pd):
+def get_close_data():
+    '''
+    获取收盘价数据
+    '''
+
+    close_data = config_dict['close_data']
+    close_data = pd.read_json(close_data)
+    close_data.index = close_data['date']
+    #  close_data = close_data.sort_index()
+    return close_data['close']
+
+def get_second_all_data():
+    '''
+    获取第二部分数据
+    '''
+    second_all_data = config_dict['second_all_data']
+    second_all_data = pd.read_json(second_all_data)
+    #  second_all_data = second_all_data.sort_index()
+    
+    return second_all_data
+
+def get_first_all_data():
+    '''
+    获取第一部分数据
+    '''
+
+    first_all_data = config_dict['first_all_data']
+    first_all_data = pd.read_json(first_all_data)
+    #  first_all_data = first_all_data.sort_index()
+    return first_all_data
+
+
+def plot_10(event):
     '''
     画前10大持仓股的曲线图
     '''
-    temp_pd = merge_pd.sort_values(merge_pd.index[0],axis=1,ascendind=False)
+    close_data = get_close_data()
+    second_all_data = get_second_all_data()
+
+    for i in range(len(second_all_data.columns)):
+        if np.issubdtype(second_all_data.iloc[:,i],np.object_):
+            second_all_data.iloc[:,i] = pd.to_numeric(second_all_data.iloc[:,i].str.replace(',', ''))
+
+    close_data = close_data.sort_index()
+    second_all_data = second_all_data.sort_index()
+    second_all_data = second_all_data.sort_values(second_all_data.index[-1],axis=1,ascending=False)
+
+    for i in range(10):
+        temp_col = second_all_data.iloc[:,i]
+        fig, ax1 = plt.subplots()
+        #plt.plot(l2,lw=1.5, label='close')
+        temp_col.plot(lw=1.5,label='volumn')
+        plt.grid(True)
+        plt.legend(loc=2)
+        plt.axis('tight')
+        plt.xlabel('index')
+        plt.ylabel('volumn')
+
+        ax2 = ax1.twinx()
+        plt.plot(close_data, 'g',lw=1.5, label='close')
+        plt.legend(loc=1)
+        plt.ylabel('close')
+        plt.title(temp_col.name)
+        plt.savefig(str(i)+'.png')
     
-    number = min(10,len(merge_pd))
-    
-    for i in range(number):
-        pass
-
-def save_to_config():
-
-    first_dict = get_first_part()
-    last_date = first_dict['last_date']
-
-    if str(pd.Timestamp(last_date)) in close_data:
-        print("该日期数据已经存在!")
-        save_to_excel(config_dict['first_dict'],config_dict['second_dict'],pd.read_json(config_dict['old_pd'])) 
-        return
-
-    second_dict = get_second_part()
-    second_pd = get_second_part(first_dict)
-    merge_pd = second_pd.append(old_pd)
-    merge_pd = merge_pd.sort_index(ascending=False)
-
-    config_dict['name_dict'] = name_dict
-    config_dict['close_data'] = close_data
-    config_dict[last_date] = [first_dict,second_dict,second_pd.to_json()]
-    config_dict['old_pd'] = merge_pd.to_json()
-    config_dict['first_dict'] = first_dict
-    config_dict['second_dict'] = second_dict
-    config_dict['second_pd'] = second_pd.to_json()
-
-    save_to_excel(first_dict,second_dict,merge_pd)
-    
-    with open('config.json','w',encoding='utf-8') as f:
-        json.dump(config_dict,f)
-
-    print('数据更新至%s!' % merge_pd.index[0])
-
+    contents.SetValue(r"画图成功!")
 
 def init():
     '''
@@ -274,7 +317,9 @@ def init():
     if os.path.exists('config.json'):
         with open('config.json','r',encoding='utf-8') as f:
             config_dict = json.load(f)
-            print("当前拥有数据区间为%s至%s" % (config_dict['already_begin_date'],config_dict['already_end_date']))
+            contents.SetValue(r"当前数据区间为:%s至%s" % (config_dict['already_begin_date'],config_dict['already_end_date']))
+            ui_begin_date.SetValue(config_dict['already_begin_date'])
+            ui_end_date.SetValue(config_dict['already_end_date'])
     else:
         config_dict = {}
         config_dict['trade_cal'] = ts.trade_cal().to_json()
@@ -283,31 +328,32 @@ def init():
         config_dict['first_all_data'] = first_all_data.to_json()
         second_all_data = pd.DataFrame()
         config_dict['second_all_data'] = second_all_data.to_json()
-        print("当前未拥有任何数据")
+        contents.SetValue(r"当前未拥有任何数据")
 
     return config_dict
 
 if __name__ == '__main__':
 
-    config_dict = init()
-
     app = wx.App()
 
-    win = wx.Frame(None,title="simple editor",size=(410,335))
+    win = wx.Frame(None,title="simple editor",size=(430,200))
 
-    begin_button = wx.Button(win,label='更新数据',pos=(225,10),size=(80,45))
+    begin_button = wx.Button(win,label='更新数据',pos=(160,10),size=(60,45))
     begin_button.Bind(wx.EVT_BUTTON,update)
-    save_button = wx.Button(win,label='写入excle',pos=(315,10),size=(80,45))
+    save_button = wx.Button(win,label='写入excle',pos=(240,10),size=(60,45))
     save_button.Bind(wx.EVT_BUTTON,write_to_excel)
+    plot_button = wx.Button(win,label='画图',pos=(320,10),size=(60,45))
+    plot_button.Bind(wx.EVT_BUTTON,plot_10)
 
     ui_label1 = wx.StaticText(win, label = "起始日期", pos = (5,5)) 
     ui_label2 = wx.StaticText(win, label = "终止日期", pos = (5,35)) 
 
-    ui_begin_date = wx.TextCtrl(win,pos=(60,5),size=(150,25))
-    ui_end_date = wx.TextCtrl(win,pos=(60,35),size=(150,25))
+    ui_begin_date = wx.TextCtrl(win,pos=(60,5),size=(90,25))
+    ui_end_date = wx.TextCtrl(win,pos=(60,35),size=(90,25))
 
-    contents = wx.TextCtrl(win,pos=(5,70),size=(390,260),style=wx.TE_MULTILINE |
-                           wx.HSCROLL)
+    contents = wx.TextCtrl(win,pos=(5,70),size=(390,80),style=rt.RE_READONLY)
+    config_dict = init()
 
     win.Show()
     app.MainLoop()
+

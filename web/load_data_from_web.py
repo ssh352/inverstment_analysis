@@ -7,6 +7,8 @@ function:
 @contact: 474918208@qq.com
 """
 
+import wx
+import wx.richtext as rt
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -16,17 +18,15 @@ import os
 from collections import OrderedDict
 import datetime
 import json
-import wx
-import wx.richtext as rt
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-url = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
 
 def update(event):
     '''
@@ -67,7 +67,7 @@ def update(event):
 
         if temp_time in config_dict:
             continue
-    
+
         select = Select(browser.find_element_by_name('ddlShareholdingMonth'))
         select.select_by_value(temp_time[5:7])
 
@@ -88,13 +88,13 @@ def update(event):
 
         first_part = get_first_part(soup,temp_time)
         second_part = get_second_part(soup,temp_time)
-        first_all_data = first_part.append(first_all_data) 
-        second_all_data = second_part.append(second_all_data) 
+        first_all_data = first_part.append(first_all_data)
+        second_all_data = second_part.append(second_all_data)
 
-        config_dict[temp_time] = [first_part.to_json(),second_part.to_json()] 
-        browser.back() 
+        config_dict[temp_time] = [first_part.to_json(),second_part.to_json()]
+        browser.back()
 
-    
+
     browser.close()
     first_all_data = first_all_data.sort_index(ascending=False)
     second_all_data = second_all_data.sort_index(ascending=False)
@@ -106,7 +106,7 @@ def update(event):
 
     config_dict['name_dict'] = name_dict
     config_dict['close_data'] = close_data.to_json()
-    config_dict['already_begin_date'] = already_begin_date 
+    config_dict['already_begin_date'] = already_begin_date
     config_dict['already_end_date'] = already_end_date
     config_dict['first_all_data'] = first_all_data.to_json()
     config_dict['second_all_data'] = second_all_data.to_json()
@@ -118,7 +118,7 @@ def update(event):
     contents.AppendText('更新数据区间完成!\n')
 
 def load_from_local():
-    
+
     with open('__ HKEX __ HKEXnews __.html','r',encoding="utf-8") as f:
         return f.read()
 
@@ -162,16 +162,16 @@ def get_second_part(soup,temp_time):
     for i in range(1,row_number):
         temp_tr = temp_html[i]
         temp_td = temp_tr.find_all('td')
-    
+
         if len(temp_td) !=col_number:
             continue
-        
+
         for j in range(col_number):
             temp_string = temp_td[j].get_text().strip()
             d[j].append(temp_string)
 
     last_pd = pd.DataFrame(d)
-    
+
     last_dict = {}
     for i in range(len(last_pd)):
         last_dict[last_pd.iat[i,0]] = last_pd.iat[i,1]
@@ -192,7 +192,7 @@ def write_to_excel(event):
     name_dict = config_dict.get('name_dict',{})
     first_all_data = config_dict['first_all_data']
     first_all_data = pd.read_json(first_all_data)
-    
+
     second_all_data = config_dict['second_all_data']
     second_all_data = pd.read_json(second_all_data)
 
@@ -216,7 +216,7 @@ def write_to_excel(event):
     index = first_all_data.index
     row_number = len(index)
     col_number = len(columns)
-    
+
     ws.cell(row=2,column=1).value = '日期'
     ws.cell(row=2,column=2).value = '收盘价'
     #  ws.cell(row=2,column=3).value = '股票代码'
@@ -225,7 +225,7 @@ def write_to_excel(event):
     ws.cell(row=2,column=4).value = '参与者数目'
     ws.cell(row=2,column=5).value = '总数百分比'
     ws.cell(row=2,column=6).value = '全部持股量'
-    
+
     for i in range(row_number):
         ws.cell(row=i+3,column=1).value = index[i].date().isoformat()
         ws.cell(row=i+3,column=2).value = close_data.iat[i]
@@ -236,7 +236,7 @@ def write_to_excel(event):
 
     for i in range(col_number):
         ws.cell(row=2,column=i+7).value = columns[i]
-        ws.cell(row=1,column=i+7).value = name_dict[columns[i]] 
+        ws.cell(row=1,column=i+7).value = name_dict[columns[i]]
 
     for i in range(row_number):
         for j in range(col_number):
@@ -264,7 +264,7 @@ def get_second_all_data():
     second_all_data = config_dict['second_all_data']
     second_all_data = pd.read_json(second_all_data)
     #  second_all_data = second_all_data.sort_index()
-    
+
     return second_all_data
 
 def get_first_all_data():
@@ -284,6 +284,7 @@ def plot_10(event):
     '''
     close_data = get_close_data()
     second_all_data = get_second_all_data()
+    name_dict = config_dict['name_dict']
 
     for i in range(len(second_all_data.columns)):
         if np.issubdtype(second_all_data.iloc[:,i],np.object_):
@@ -293,6 +294,9 @@ def plot_10(event):
     second_all_data = second_all_data.sort_index()
     second_all_data = second_all_data.sort_values(second_all_data.index[-1],axis=1,ascending=False)
 
+    myfont = mpl.font_manager.FontProperties(fname="simhei.ttf")
+    mpl.rcParams['axes.unicode_minus'] = False
+
     for i in range(10):
         temp_col = second_all_data.iloc[:,i]
         fig, ax1 = plt.subplots()
@@ -301,16 +305,16 @@ def plot_10(event):
         plt.grid(True)
         plt.legend(loc=2)
         plt.axis('tight')
-        plt.xlabel('index')
+        plt.xlabel('time')
         plt.ylabel('volumn')
 
         ax2 = ax1.twinx()
         plt.plot(close_data, 'g',lw=1.5, label='close')
         plt.legend(loc=1)
         plt.ylabel('close')
-        plt.title(temp_col.name)
+        plt.title(name_dict[temp_col.name],fontproperties=myfont)
         plt.savefig(str(i)+'.png')
-    
+
     #  contents.SetValue(r"画图成功!")
     contents.AppendText("画图成功!\n")
 
@@ -373,6 +377,8 @@ def init():
 
 if __name__ == '__main__':
 
+    rl = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
+
     today_date = datetime.date.today()
     max_date = today_date - datetime.timedelta(1)
     min_date = datetime.date(today_date.year-1,today_date.month,today_date.day)
@@ -388,8 +394,8 @@ if __name__ == '__main__':
     plot_button = wx.Button(win,label='画图',pos=(320,10),size=(60,45))
     plot_button.Bind(wx.EVT_BUTTON,plot_10)
 
-    ui_label1 = wx.StaticText(win, label = "起始日期", pos = (5,5)) 
-    ui_label2 = wx.StaticText(win, label = "终止日期", pos = (5,35)) 
+    ui_label1 = wx.StaticText(win, label = "起始日期", pos = (5,5))
+    ui_label2 = wx.StaticText(win, label = "终止日期", pos = (5,35))
 
     ui_begin_date = wx.TextCtrl(win,pos=(60,5),size=(90,25))
     ui_begin_date.Bind(wx.EVT_TEXT,ui_begin_date_evt_text)
@@ -401,4 +407,3 @@ if __name__ == '__main__':
 
     win.Show()
     app.MainLoop()
-

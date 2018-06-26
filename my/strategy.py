@@ -3,6 +3,13 @@
 
 """
 function:
+    策略实例：策略应该和账号绑定
+
+    属性：
+    order：下过的订单
+
+    接口：
+    下单函数
 @author: zkang kai
 @contact: 474918208@qq.com
 """

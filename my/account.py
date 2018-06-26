@@ -3,11 +3,20 @@
 
 """
 function: 
+    账号：
+
+    属性：
+    
+    方法：
+        绑定了哪些策略
+        显示所有的订单
+        显示持仓
+        显示资金
+        显示连接情况
+        连接交易接口
 @author: zkang kai
 @contact: 474918208@qq.com
 """
-
-""" account object """
 
 class stock_account(object):
     def __init__():
@@ -27,34 +36,4 @@ class financial_futures_account(object):
     pass
 
 class options_account(object):
-    pass
-
-"""  order object """
-
-class stock_order(object):
-    pass
-
-class credit_order(object):
-    pass
-
-class commodity_futures_order(object):
-    pass
-
-class financial_futures_order(object):
-    pass
-
-class options_order(object):
-    pass
-
-""" data object"""
-class stock_level1_tick_data(object):
-    """
-    股票的level1数据
-    """
-    def __init__(self): 
-        pass
-
-""" portfolio """
-
-class portfolio(object):
     pass

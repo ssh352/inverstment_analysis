@@ -2,9 +2,15 @@
 # coding:utf-8
 
 """
-function: 该类用来加载所有的可连接的gateway,提供对内统一的下单接口
+function: 
+    该类用来加载所有的可连接的gateway,提供对内统一的下单接口
+    
+    主要针对策略实例来进行调用
 @author: zkang kai
 @contact: 474918208@qq.com
+
+history:
+    2016-06-26:更新需求说明文档
 """
 
 

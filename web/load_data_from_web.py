@@ -28,99 +28,123 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+
+def load_config_data(sh_code):
+    '''
+    根据股票代码返回数据
+    '''
+    config_json = sh_code + '.json'
+    if os.path.exists(config_json):
+        with open(config_json,'r',encoding='utf-8') as f:
+            config_dict = json.load(f)
+    else:
+        config_dict = {}
+        config_dict['name_dict'] = {}
+        first_all_data = pd.DataFrame()
+        config_dict['first_all_data'] = first_all_data.to_json()
+        second_all_data = pd.DataFrame()
+        config_dict['second_all_data'] = second_all_data.to_json()
+        contents.AppendText("当前未拥有任何数据\n")
+
+    return config_dict
+
 def update(event):
     '''
     更新数据
     '''
+
+    symbol_number = len(sh_code_list)
+
     begin_date = ui_begin_date.GetValue()
     end_date = ui_end_date.GetValue()
+    #  stk_code = symbol_text.GetValue()
 
     if len(begin_date) != 10 and len(end_date) != 10:
-        #  contents.SetValue("日期格式不对,请参照:20180101填写")
         contents.AppendText("日期格式不对,请参照:20180101填写\n")
         return None
-
-    name_dict = config_dict.get('name_dict',{})
-    first_all_data = config_dict['first_all_data']
-    first_all_data = pd.read_json(first_all_data)
-    second_all_data = config_dict['second_all_data']
-    second_all_data = pd.read_json(second_all_data)
-
-    already_begin_date = config_dict.get('already_begin_date',begin_date)
-    already_end_date = config_dict.get('already_end_date',end_date)
-
-    trade_cal = config_dict['trade_cal']
-    trade_cal = pd.read_json(trade_cal)
-    trade_cal = trade_cal.sort_index()
-    trade_cal = trade_cal[trade_cal['calendarDate'] >= begin_date]
-    trade_cal = trade_cal[trade_cal['calendarDate'] <= end_date]
-    trade_cal = trade_cal[trade_cal['isOpen'] == 1]
-    trade_cal = trade_cal['calendarDate']
-
-    #  contents.SetValue('开始下载数据...........')
-    contents.AppendText('开始下载数据...........\n')
 
     browser = webdriver.Chrome()
     browser.get(url)
 
-    for temp_time in trade_cal:
+    contents.AppendText('开始下载数据...........\n')
 
-        if temp_time in config_dict:
-            continue
+    for i in range(symbol_number):
+        sh_code = sh_code_list[i]
+        hk_code = hk_code_list[i]
 
-        select = Select(browser.find_element_by_name('ddlShareholdingMonth'))
-        select.select_by_value(temp_time[5:7])
+        config_dict = load_config_data(sh_code)
 
-        select = Select(browser.find_element_by_name('ddlShareholdingDay'))
-        select.select_by_value(temp_time[8:10])
+        name_dict = config_dict.get('name_dict',{})
+        first_all_data = config_dict['first_all_data']
+        first_all_data = pd.read_json(first_all_data)
+        second_all_data = config_dict['second_all_data']
+        second_all_data = pd.read_json(second_all_data)
 
-        select = Select(browser.find_element_by_name('ddlShareholdingYear'))
-        select.select_by_value(temp_time[0:4])
+        already_begin_date = config_dict.get('already_begin_date',begin_date)
+        already_end_date = config_dict.get('already_end_date',end_date)
 
-        element = browser.find_element_by_id("txtStockCode")
-        element.send_keys("91888")
+        temp_trade_cal = global_trade_cal[global_trade_cal['calendarDate'] >= begin_date]
+        temp_trade_cal = temp_trade_cal[temp_trade_cal['calendarDate'] <= end_date]
+        temp_trade_cal = temp_trade_cal[temp_trade_cal['isOpen'] == 1]
+        temp_trade_cal = temp_trade_cal['calendarDate']
 
-        browser.find_element_by_id("btnSearch").click()
+        for temp_time in temp_trade_cal:
 
-        html_txt = browser.page_source
+            if temp_time in config_dict:
+                continue
 
-        soup = BeautifulSoup(html_txt,'html.parser')
+            select = Select(browser.find_element_by_name('ddlShareholdingMonth'))
+            select.select_by_value(temp_time[5:7])
 
-        first_part = get_first_part(soup,temp_time)
-        second_part = get_second_part(soup,temp_time)
-        first_all_data = first_part.append(first_all_data)
-        second_all_data = second_part.append(second_all_data)
+            select = Select(browser.find_element_by_name('ddlShareholdingDay'))
+            select.select_by_value(temp_time[8:10])
 
-        config_dict[temp_time] = [first_part.to_json(),second_part.to_json()]
-        browser.back()
+            select = Select(browser.find_element_by_name('ddlShareholdingYear'))
+            select.select_by_value(temp_time[0:4])
 
+            element = browser.find_element_by_id("txtStockCode")
+            #  element.send_keys("91888")
+            element.send_keys(hk_code)
+
+            browser.find_element_by_id("btnSearch").click()
+
+            html_txt = browser.page_source
+
+            soup = BeautifulSoup(html_txt,'html.parser')
+
+            first_part = get_first_part(soup,temp_time)
+            second_part = get_second_part(soup,temp_time)
+            first_all_data = first_part.append(first_all_data)
+            second_all_data = second_part.append(second_all_data)
+
+            config_dict[temp_time] = [first_part.to_json(),second_part.to_json()]
+            browser.back()
+
+
+        first_all_data = first_all_data.sort_index(ascending=False)
+        second_all_data = second_all_data.sort_index(ascending=False)
+        second_all_data = second_all_data.fillna(0)
+
+        already_begin_date = first_all_data.index[-1].date().isoformat()
+        already_end_date = first_all_data.index[0].date().isoformat()
+        #  close_data = ts.get_k_data('601888',start=already_begin_date,end=already_end_date)
+        close_data = ts.get_k_data(sh_code,start=already_begin_date,end=already_end_date)
+
+        config_dict['name_dict'] = name_dict
+        config_dict['close_data'] = close_data.to_json()
+        config_dict['already_begin_date'] = already_begin_date
+        config_dict['already_end_date'] = already_end_date
+        config_dict['first_all_data'] = first_all_data.to_json()
+        config_dict['second_all_data'] = second_all_data.to_json()
+
+        with open(sh_code+'.json','w',encoding='utf-8') as f:
+            json.dump(config_dict,f)
+
+        contents.AppendText(sh_code+':更新数据完成!\n')
 
     browser.close()
-    first_all_data = first_all_data.sort_index(ascending=False)
-    second_all_data = second_all_data.sort_index(ascending=False)
-    second_all_data = second_all_data.fillna(0)
+    contents.AppendText('全部更新完成!\n')
 
-    already_begin_date = first_all_data.index[-1].date().isoformat()
-    already_end_date = first_all_data.index[0].date().isoformat()
-    close_data = ts.get_k_data('601888',start=already_begin_date,end=already_end_date)
-
-    config_dict['name_dict'] = name_dict
-    config_dict['close_data'] = close_data.to_json()
-    config_dict['already_begin_date'] = already_begin_date
-    config_dict['already_end_date'] = already_end_date
-    config_dict['first_all_data'] = first_all_data.to_json()
-    config_dict['second_all_data'] = second_all_data.to_json()
-
-    with open('config.json','w',encoding='utf-8') as f:
-        json.dump(config_dict,f)
-
-    #  contents.SetValue('更新数据区间完成!')
-    contents.AppendText('更新数据区间完成!\n')
-
-def load_from_local():
-
-    with open('__ HKEX __ HKEXnews __.html','r',encoding="utf-8") as f:
-        return f.read()
 
 def get_first_part(soup,temp_time):
 
@@ -185,68 +209,99 @@ def get_second_part(soup,temp_time):
 
     return new_pd
 
+
+def load_symbol_data(event):
+    '''
+    点击按钮加载json当中的数据
+    '''
+    hk_code_list = []
+    sh_code_list = []
+    symbol_number = symbol_list.GetNumberOfLines()
+    for i in range(symbol_number):
+        symbol_code = symbol_list.GetLineText(i)
+        if len(symbol_code) == 5:
+            hk_code_list.append(symbol_code)
+            sh_code_list.append("60"+symbol_code[1:])
+        elif len(symbol_code) == 6:
+            sh_code_list.append(symbol_code)
+            hk_code_list.append("9" + symbol_code[2:])
+        else:
+            contents.AppendText(symbol_code + ":无法识别股票代码,请填写5位港股或6位上海市场代码\n")
+
+
+
 def write_to_excel(event):
     '''
     把数据写入excle中
     '''
-    name_dict = config_dict.get('name_dict',{})
-    first_all_data = config_dict['first_all_data']
-    first_all_data = pd.read_json(first_all_data)
+    symbol_number = len(sh_code_list)
 
-    second_all_data = config_dict['second_all_data']
-    second_all_data = pd.read_json(second_all_data)
+    for i in range(symbo_numver):
 
-    close_data = config_dict['close_data']
-    close_data = pd.read_json(close_data)
-    close_data = close_data['close']
+        sh_code = sh_code_list[i]
 
-    hold_volumn = first_all_data['hold_volumn']
-    people_number = first_all_data['people_number']
-    hold_precent = first_all_data['hold_precent']
-    all_volumn = first_all_data['all_volumn']
+        config_dict = load_config_data(sh_code)
 
-    first_all_data = first_all_data.sort_index(ascending=False)
-    second_all_data = second_all_data.sort_index(ascending=False)
-    close_data = close_data.sort_index(ascending=False)
+        name_dict = config_dict.get('name_dict',{})
+        first_all_data = config_dict['first_all_data']
+        first_all_data = pd.read_json(first_all_data)
 
-    wb = oxl.Workbook()
-    ws = wb.create_sheet(index=0,title='oxl-sheet')
+        second_all_data = config_dict['second_all_data']
+        second_all_data = pd.read_json(second_all_data)
 
-    columns = second_all_data.columns
-    index = first_all_data.index
-    row_number = len(index)
-    col_number = len(columns)
+        close_data = config_dict['close_data']
+        close_data = pd.read_json(close_data)
+        close_data = close_data['close']
 
-    ws.cell(row=2,column=1).value = '日期'
-    ws.cell(row=2,column=2).value = '收盘价'
-    #  ws.cell(row=2,column=3).value = '股票代码'
-    #  ws.cell(row=2,column=4).value = '股票名称'
-    ws.cell(row=2,column=3).value = '中央结算系统持股量'
-    ws.cell(row=2,column=4).value = '参与者数目'
-    ws.cell(row=2,column=5).value = '总数百分比'
-    ws.cell(row=2,column=6).value = '全部持股量'
+        hold_volumn = first_all_data['hold_volumn']
+        people_number = first_all_data['people_number']
+        hold_precent = first_all_data['hold_precent']
+        all_volumn = first_all_data['all_volumn']
 
-    for i in range(row_number):
-        ws.cell(row=i+3,column=1).value = index[i].date().isoformat()
-        ws.cell(row=i+3,column=2).value = close_data.iat[i]
-        ws.cell(row=i+3,column=3).value = hold_volumn.iat[i]
-        ws.cell(row=i+3,column=4).value = people_number.iat[i]
-        ws.cell(row=i+3,column=5).value = hold_precent.iat[i]
-        ws.cell(row=i+3,column=6).value = all_volumn.iat[i]
+        first_all_data = first_all_data.sort_index(ascending=False)
+        second_all_data = second_all_data.sort_index(ascending=False)
+        close_data = close_data.sort_index(ascending=False)
 
-    for i in range(col_number):
-        ws.cell(row=2,column=i+7).value = columns[i]
-        ws.cell(row=1,column=i+7).value = name_dict[columns[i]]
+        wb = oxl.Workbook()
+        ws = wb.create_sheet(index=0,title='oxl-sheet')
 
-    for i in range(row_number):
-        for j in range(col_number):
-            ws.cell(row=3+i,column=j+7).value = second_all_data.iat[i,j]
+        columns = second_all_data.columns
+        index = first_all_data.index
+        row_number = len(index)
+        col_number = len(columns)
 
-    wb.save('test.xlsx')
-    #  contents.SetValue(r"数据已写入excel中!")
-    contents.AppendText("数据已写入excel中!\n")
+        ws.cell(row=2,column=1).value = '日期'
+        ws.cell(row=2,column=2).value = '收盘价'
+        #  ws.cell(row=2,column=3).value = '股票代码'
+        #  ws.cell(row=2,column=4).value = '股票名称'
+        ws.cell(row=2,column=3).value = '中央结算系统持股量'
+        ws.cell(row=2,column=4).value = '参与者数目'
+        ws.cell(row=2,column=5).value = '总数百分比'
+        ws.cell(row=2,column=6).value = '全部持股量'
 
-def get_close_data():
+        for i in range(row_number):
+            ws.cell(row=i+3,column=1).value = index[i].date().isoformat()
+            ws.cell(row=i+3,column=2).value = close_data.iat[i]
+            ws.cell(row=i+3,column=3).value = hold_volumn.iat[i]
+            ws.cell(row=i+3,column=4).value = people_number.iat[i]
+            ws.cell(row=i+3,column=5).value = hold_precent.iat[i]
+            ws.cell(row=i+3,column=6).value = all_volumn.iat[i]
+
+        for i in range(col_number):
+            ws.cell(row=2,column=i+7).value = columns[i]
+            ws.cell(row=1,column=i+7).value = name_dict[columns[i]]
+
+        for i in range(row_number):
+            for j in range(col_number):
+                ws.cell(row=3+i,column=j+7).value = second_all_data.iat[i,j]
+
+        wb.save(sh_code+'.xlsx')
+        #  contents.SetValue(r"数据已写入excel中!")
+        contents.AppendText(sh_code+"数据已写入excel中!\n")
+
+    contents.AppendText("全部数据已写入excel中!\n")
+
+def get_close_data(config_dict):
     '''
     获取收盘价数据
     '''
@@ -257,7 +312,7 @@ def get_close_data():
     #  close_data = close_data.sort_index()
     return close_data['close']
 
-def get_second_all_data():
+def get_second_all_data(config_dict):
     '''
     获取第二部分数据
     '''
@@ -282,41 +337,49 @@ def plot_10(event):
     '''
     画前10大持仓股的曲线图
     '''
-    close_data = get_close_data()
-    second_all_data = get_second_all_data()
-    name_dict = config_dict['name_dict']
 
-    for i in range(len(second_all_data.columns)):
-        if np.issubdtype(second_all_data.iloc[:,i],np.object_):
-            second_all_data.iloc[:,i] = pd.to_numeric(second_all_data.iloc[:,i].str.replace(',', ''))
+    symbol_number = len(sh_code_list)
 
-    close_data = close_data.sort_index()
-    second_all_data = second_all_data.sort_index()
-    second_all_data = second_all_data.sort_values(second_all_data.index[-1],axis=1,ascending=False)
+    for j in range(symbol_number):
+        sh_code = sh_code_list[j]
+        config_dict = load_config_data(sh_code)
 
-    myfont = mpl.font_manager.FontProperties(fname="simhei.ttf")
-    mpl.rcParams['axes.unicode_minus'] = False
+        close_data = get_close_data(config_dict)
+        second_all_data = get_second_all_data(config_dict)
+        name_dict = config_dict['name_dict']
 
-    for i in range(10):
-        temp_col = second_all_data.iloc[:,i]
-        fig, ax1 = plt.subplots()
-        #plt.plot(l2,lw=1.5, label='close')
-        temp_col.plot(lw=1.5,label='volumn')
-        plt.grid(True)
-        plt.legend(loc=2)
-        plt.axis('tight')
-        plt.xlabel('time')
-        plt.ylabel('volumn')
+        for i in range(len(second_all_data.columns)):
+            if np.issubdtype(second_all_data.iloc[:,i],np.object_):
+                second_all_data.iloc[:,i] = pd.to_numeric(second_all_data.iloc[:,i].str.replace(',', ''))
 
-        ax2 = ax1.twinx()
-        plt.plot(close_data, 'g',lw=1.5, label='close')
-        plt.legend(loc=1)
-        plt.ylabel('close')
-        plt.title(name_dict[temp_col.name],fontproperties=myfont)
-        plt.savefig(str(i)+'.png')
+        close_data = close_data.sort_index()
+        second_all_data = second_all_data.sort_index()
+        second_all_data = second_all_data.sort_values(second_all_data.index[-1],axis=1,ascending=False)
 
-    #  contents.SetValue(r"画图成功!")
-    contents.AppendText("画图成功!\n")
+        myfont = mpl.font_manager.FontProperties(fname="simhei.ttf")
+        mpl.rcParams['axes.unicode_minus'] = False
+
+        for i in range(10):
+            temp_col = second_all_data.iloc[:,i]
+            fig, ax1 = plt.subplots()
+            #plt.plot(l2,lw=1.5, label='close')
+            temp_col.plot(lw=1.5,label='volumn')
+            plt.grid(True)
+            plt.legend(loc=2)
+            plt.axis('tight')
+            plt.xlabel('time')
+            plt.ylabel('volumn')
+
+            ax2 = ax1.twinx()
+            plt.plot(close_data, 'g',lw=1.5, label='close')
+            plt.legend(loc=1)
+            plt.ylabel('close')
+            plt.title(name_dict[temp_col.name],fontproperties=myfont)
+            plt.savefig(str(i)+'.png')
+
+        contents.AppendText(sh_code + "画图成功!\n")
+
+    contents.AppendText("画图完成!\n")
 
 def ui_end_date_evt_text(event):
     '''
@@ -360,24 +423,23 @@ def init():
     if os.path.exists('config.json'):
         with open('config.json','r',encoding='utf-8') as f:
             config_dict = json.load(f)
-            #  contents.SetValue(r"当前数据区间为:%s至%s" % (config_dict['already_begin_date'],config_dict['already_end_date']))
-            contents.AppendText("当前拥有数据区间为:%s至%s\n" % (config_dict['already_begin_date'],config_dict['already_end_date']))
-    else:
-        config_dict = {}
-        config_dict['trade_cal'] = ts.trade_cal().to_json()
-        config_dict['name_dict'] = {}
-        first_all_data = pd.DataFrame()
-        config_dict['first_all_data'] = first_all_data.to_json()
-        second_all_data = pd.DataFrame()
-        config_dict['second_all_data'] = second_all_data.to_json()
-        #  contents.SetValue(r"当前未拥有任何数据")
-        contents.AppendText("当前未拥有任何数据\n")
+            temp_trade_cal = config_dict['trade_cal']
+            temp_trade_cal = pd.read_json(temp_trade_cal)
+            temp_trade_cal = temp_trade_cal.sort_index()
 
-    return config_dict
+    else:
+        temp_trade_cal = ts.trade_cal()
+        config_dict = {}
+        config_dict['trade_cal'] = temp_trade_cal.to_json()
+        
+        with open('config.json','w',encoding='utf-8') as f:
+            json.dump(config_dict,f)
+
+    return  temp_trade_cal
 
 if __name__ == '__main__':
 
-    rl = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
+    url = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
 
     today_date = datetime.date.today()
     max_date = today_date - datetime.timedelta(1)
@@ -385,25 +447,33 @@ if __name__ == '__main__':
 
     app = wx.App()
 
-    win = wx.Frame(None,title="simple editor",size=(430,300))
+    win = wx.Frame(None,title="simple editor",size=(830,800))
 
-    begin_button = wx.Button(win,label='更新数据',pos=(160,10),size=(60,45))
+    begin_button = wx.Button(win,label='更新数据',pos=(160,60),size=(60,45))
     begin_button.Bind(wx.EVT_BUTTON,update)
-    save_button = wx.Button(win,label='写入excle',pos=(240,10),size=(60,45))
+    save_button = wx.Button(win,label='写入excle',pos=(240,60),size=(60,45))
     save_button.Bind(wx.EVT_BUTTON,write_to_excel)
-    plot_button = wx.Button(win,label='画图',pos=(320,10),size=(60,45))
+    plot_button = wx.Button(win,label='画图',pos=(320,60),size=(60,45))
     plot_button.Bind(wx.EVT_BUTTON,plot_10)
 
-    ui_label1 = wx.StaticText(win, label = "起始日期", pos = (5,5))
-    ui_label2 = wx.StaticText(win, label = "终止日期", pos = (5,35))
+    load_data_button = wx.Button(win,label='加载数据',pos=(160,100),size=(60,45))
+    load_data_button.Bind(wx.EVT_BUTTON,load_symbol_data)
 
-    ui_begin_date = wx.TextCtrl(win,pos=(60,5),size=(90,25))
+    ui_label1 = wx.StaticText(win, label = "起始日期", pos = (80,18))
+    ui_label2 = wx.StaticText(win, label = "终止日期", pos = (280,18))
+
+    ui_begin_date = wx.TextCtrl(win,pos=(140,15),size=(90,25))
     ui_begin_date.Bind(wx.EVT_TEXT,ui_begin_date_evt_text)
-    ui_end_date = wx.TextCtrl(win,pos=(60,35),size=(90,25))
+    ui_end_date = wx.TextCtrl(win,pos=(340,15),size=(90,25))
     ui_end_date.Bind(wx.EVT_TEXT,ui_end_date_evt_text)
 
-    contents = wx.TextCtrl(win,pos=(5,70),size=(390,180),style=rt.RE_READONLY | wx.TE_MULTILINE)
-    config_dict = init()
+    # 输入股票代码
+    ui_label3 = wx.StaticText(win, label = "股票代码列表", pos = (100,140))
+    symbol_list = wx.TextCtrl(win,pos=(100,170),size=(100,200),style=wx.TE_MULTILINE)
+
+    ui_label4 = wx.StaticText(win, label = "操作记录", pos = (300,140))
+    contents = wx.TextCtrl(win,pos=(300,170),size=(390,200),style=rt.RE_READONLY | wx.TE_MULTILINE)
+    global_trade_cal = init()
 
     win.Show()
     app.MainLoop()

@@ -68,9 +68,9 @@ def update(event):
 
     contents.AppendText('开始下载数据...........\n')
 
-    for i in range(symbol_number):
-        sh_code = sh_code_list[i]
-        hk_code = hk_code_list[i]
+    for j in range(symbol_number):
+        sh_code = sh_code_list[j]
+        hk_code = hk_code_list[j]
 
         config_dict = load_config_data(sh_code)
 
@@ -113,7 +113,7 @@ def update(event):
             soup = BeautifulSoup(html_txt,'html.parser')
 
             first_part = get_first_part(soup,temp_time)
-            second_part = get_second_part(soup,temp_time)
+            second_part = get_second_part(config_dict,soup,temp_time)
             first_all_data = first_part.append(first_all_data)
             second_all_data = second_part.append(second_all_data)
 
@@ -170,7 +170,7 @@ def get_first_part(soup,temp_time):
 
     return pd.DataFrame(first_dict,index=[pd.Timestamp(temp_time)])
 
-def get_second_part(soup,temp_time):
+def get_second_part(config_dict,soup,temp_time):
 
     name_dict = config_dict.get('name_dict',{})
     temp_html = soup.find("table",{"id":{"participantShareholdingList"}})
@@ -214,8 +214,6 @@ def load_symbol_data(event):
     '''
     点击按钮加载json当中的数据
     '''
-    hk_code_list = []
-    sh_code_list = []
     symbol_number = symbol_list.GetNumberOfLines()
     for i in range(symbol_number):
         symbol_code = symbol_list.GetLineText(i)
@@ -227,7 +225,13 @@ def load_symbol_data(event):
             hk_code_list.append("9" + symbol_code[2:])
         else:
             contents.AppendText(symbol_code + ":无法识别股票代码,请填写5位港股或6位上海市场代码\n")
+            continue
 
+        sh_code = sh_code_list[-1]
+        if not os.path.isdir(sh_code):
+            os.makedirs(sh_code)
+
+    contents.AppendText("成功加载 "+str(len(sh_code_list))+" 股票代码!\n")
 
 
 def write_to_excel(event):
@@ -236,9 +240,11 @@ def write_to_excel(event):
     '''
     symbol_number = len(sh_code_list)
 
-    for i in range(symbo_numver):
+    wb = oxl.Workbook()
 
-        sh_code = sh_code_list[i]
+    for j in range(symbol_number):
+
+        sh_code = sh_code_list[j]
 
         config_dict = load_config_data(sh_code)
 
@@ -262,7 +268,6 @@ def write_to_excel(event):
         second_all_data = second_all_data.sort_index(ascending=False)
         close_data = close_data.sort_index(ascending=False)
 
-        wb = oxl.Workbook()
         ws = wb.create_sheet(index=0,title='oxl-sheet')
 
         columns = second_all_data.columns
@@ -339,6 +344,7 @@ def plot_10(event):
     '''
 
     symbol_number = len(sh_code_list)
+    print(sh_code_list)
 
     for j in range(symbol_number):
         sh_code = sh_code_list[j]
@@ -375,7 +381,7 @@ def plot_10(event):
             plt.legend(loc=1)
             plt.ylabel('close')
             plt.title(name_dict[temp_col.name],fontproperties=myfont)
-            plt.savefig(str(i)+'.png')
+            plt.savefig("./"+sh_code+"/"+str(i)+'.png')
 
         contents.AppendText(sh_code + "画图成功!\n")
 
@@ -444,19 +450,22 @@ if __name__ == '__main__':
     today_date = datetime.date.today()
     max_date = today_date - datetime.timedelta(1)
     min_date = datetime.date(today_date.year-1,today_date.month,today_date.day)
+    
+    sh_code_list = []
+    hk_code_list = []
 
     app = wx.App()
 
     win = wx.Frame(None,title="simple editor",size=(830,800))
 
-    begin_button = wx.Button(win,label='更新数据',pos=(160,60),size=(60,45))
+    begin_button = wx.Button(win,label='更新数据',pos=(200,80),size=(60,45))
     begin_button.Bind(wx.EVT_BUTTON,update)
-    save_button = wx.Button(win,label='写入excle',pos=(240,60),size=(60,45))
+    save_button = wx.Button(win,label='写入excle',pos=(280,80),size=(60,45))
     save_button.Bind(wx.EVT_BUTTON,write_to_excel)
-    plot_button = wx.Button(win,label='画图',pos=(320,60),size=(60,45))
+    plot_button = wx.Button(win,label='画图',pos=(360,80),size=(60,45))
     plot_button.Bind(wx.EVT_BUTTON,plot_10)
 
-    load_data_button = wx.Button(win,label='加载数据',pos=(160,100),size=(60,45))
+    load_data_button = wx.Button(win,label='加载股票列表',pos=(80,80),size=(80,45))
     load_data_button.Bind(wx.EVT_BUTTON,load_symbol_data)
 
     ui_label1 = wx.StaticText(win, label = "起始日期", pos = (80,18))
@@ -468,8 +477,8 @@ if __name__ == '__main__':
     ui_end_date.Bind(wx.EVT_TEXT,ui_end_date_evt_text)
 
     # 输入股票代码
-    ui_label3 = wx.StaticText(win, label = "股票代码列表", pos = (100,140))
-    symbol_list = wx.TextCtrl(win,pos=(100,170),size=(100,200),style=wx.TE_MULTILINE)
+    ui_label3 = wx.StaticText(win, label = "股票代码列表", pos = (80,140))
+    symbol_list = wx.TextCtrl(win,pos=(80,170),size=(120,200),style=wx.TE_MULTILINE)
 
     ui_label4 = wx.StaticText(win, label = "操作记录", pos = (300,140))
     contents = wx.TextCtrl(win,pos=(300,170),size=(390,200),style=rt.RE_READONLY | wx.TE_MULTILINE)

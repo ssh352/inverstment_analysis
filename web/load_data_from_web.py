@@ -28,6 +28,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+url = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
+
+today_date = datetime.date.today()
+max_date = today_date - datetime.timedelta(1)
+min_date = datetime.date(today_date.year-1,today_date.month,today_date.day)
+
+sh_code_list = []
+hk_code_list = []
 
 def load_config_data(sh_code):
     '''
@@ -44,7 +52,7 @@ def load_config_data(sh_code):
         config_dict['first_all_data'] = first_all_data.to_json()
         second_all_data = pd.DataFrame()
         config_dict['second_all_data'] = second_all_data.to_json()
-        contents.AppendText("当前未拥有任何数据\n")
+        #  contents.AppendText("当前未拥有任何数据\n")
 
     return config_dict
 
@@ -214,6 +222,14 @@ def load_symbol_data(event):
     '''
     点击按钮加载json当中的数据
     '''
+
+    global hk_code_list
+    global sh_code_list
+
+    if len(hk_code_list) > 0:
+        hk_code_list = []
+        sh_code_list = []
+
     symbol_number = symbol_list.GetNumberOfLines()
     for i in range(symbol_number):
         symbol_code = symbol_list.GetLineText(i)
@@ -223,6 +239,8 @@ def load_symbol_data(event):
         elif len(symbol_code) == 6:
             sh_code_list.append(symbol_code)
             hk_code_list.append("9" + symbol_code[2:])
+        elif len(symbol_code) == 0:
+            continue
         else:
             contents.AppendText(symbol_code + ":无法识别股票代码,请填写5位港股或6位上海市场代码\n")
             continue
@@ -267,6 +285,7 @@ def write_to_excel(event):
         first_all_data = first_all_data.sort_index(ascending=False)
         second_all_data = second_all_data.sort_index(ascending=False)
         close_data = close_data.sort_index(ascending=False)
+        #  print(close_data)
 
         ws = wb.create_sheet(index=0,title='oxl-sheet')
 
@@ -274,6 +293,12 @@ def write_to_excel(event):
         index = first_all_data.index
         row_number = len(index)
         col_number = len(columns)
+
+        input_close_data = True
+        if len(close_data) != row_number:
+            input_close_data = False
+            
+        #  print(len(close_data),'---',row_number)
 
         ws.cell(row=2,column=1).value = '日期'
         ws.cell(row=2,column=2).value = '收盘价'
@@ -286,7 +311,8 @@ def write_to_excel(event):
 
         for i in range(row_number):
             ws.cell(row=i+3,column=1).value = index[i].date().isoformat()
-            ws.cell(row=i+3,column=2).value = close_data.iat[i]
+            if input_close_data:
+                ws.cell(row=i+3,column=2).value = close_data.iat[i]
             ws.cell(row=i+3,column=3).value = hold_volumn.iat[i]
             ws.cell(row=i+3,column=4).value = people_number.iat[i]
             ws.cell(row=i+3,column=5).value = hold_precent.iat[i]
@@ -344,7 +370,6 @@ def plot_10(event):
     '''
 
     symbol_number = len(sh_code_list)
-    print(sh_code_list)
 
     for j in range(symbol_number):
         sh_code = sh_code_list[j]
@@ -382,6 +407,23 @@ def plot_10(event):
             plt.ylabel('close')
             plt.title(name_dict[temp_col.name],fontproperties=myfont)
             plt.savefig("./"+sh_code+"/"+str(i)+'.png')
+
+            #  fig, ax1 = plt.subplots()
+            #  ax2 = ax1.twinx()
+            #
+            #  ax1.plot(temp_col,'g-',lw=1.5,label='volumn')
+            #  ax2.plot(close_data,'b-',lw=1.5,label='close')
+            #
+            #  ax1.set_xlabel('time')
+            #  ax1.set_ylabel('volume')
+            #  ax2.set_ylabel('close')
+            #
+            #  ax1.legend(loc=2)
+            #  ax2.legend(loc=1)
+            #
+            #  plt.grid(True)
+            #  plt.title(name_dict[temp_col.name],fontproperties=myfont)
+            #  plt.savefig("./"+sh_code+"/"+str(i)+'.png')
 
         contents.AppendText(sh_code + "画图成功!\n")
 
@@ -443,16 +485,102 @@ def init():
 
     return  temp_trade_cal
 
-if __name__ == '__main__':
-
-    url = r"http://www.hkexnews.hk/sdw/search/searchsdw_c.aspx"
-
-    today_date = datetime.date.today()
-    max_date = today_date - datetime.timedelta(1)
-    min_date = datetime.date(today_date.year-1,today_date.month,today_date.day)
+def init_symbol_combox():
+    '''
+    初始化可供选择的股票列表
+    '''
     
-    sh_code_list = []
-    hk_code_list = []
+    for file_name in os.listdir("./"):
+        if (file_name[0] == '6' and len(file_name) == 11 and file_name.find('.json') != -1):
+            symbol_combox.Append(file_name[0:6])
+            symbol_list.AppendText(file_name[0:6]+"\n")
+            
+            
+        
+def select_symbol(event):
+    '''
+    选择股票
+    '''
+
+    sh_code = symbol_combox.GetStringSelection()
+    config_dict = load_config_data(sh_code)
+
+    name_dict = config_dict.get('name_dict',{})
+    
+    company_combox.Clear()
+
+    all_company = list(name_dict.values())
+
+    for i in all_company:
+        company_combox.Append(i)
+    #  company_combox.AppendItems(list(name_dict.values()))
+    #  company_combox.AppendItems([1,2,3])
+
+def select_company(event):
+    '''
+    选择公司
+    '''
+
+    pass
+
+def plot_company(event):
+    '''
+    画特定公司图表
+    '''
+    sh_code = symbol_combox.GetStringSelection()
+    config_dict = load_config_data(sh_code)
+
+    close_data = get_close_data(config_dict)
+    second_all_data = get_second_all_data(config_dict)
+    name_dict = config_dict['name_dict']
+
+    for i in range(len(second_all_data.columns)):
+        if np.issubdtype(second_all_data.iloc[:,i],np.object_):
+            second_all_data.iloc[:,i] = pd.to_numeric(second_all_data.iloc[:,i].str.replace(',', ''))
+
+    close_data = close_data.sort_index()
+    second_all_data = second_all_data.sort_index()
+    second_all_data = second_all_data.sort_values(second_all_data.index[-1],axis=1,ascending=False)
+
+    myfont = mpl.font_manager.FontProperties(fname="simhei.ttf")
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    temp_name = [k for k,v in name_dict.items() if v == company_combox.GetStringSelection()]
+
+    temp_col = second_all_data.loc[:,temp_name]
+
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+
+    ax1.plot(temp_col,'b',lw=1.5,label='volumn')
+    ax2.plot(close_data,'g',lw=1.5,label='close')
+
+    ax1.set_xlabel('time')
+    ax1.set_ylabel('volume')
+    ax2.set_ylabel('close')
+
+    ax1.legend(loc=2)
+    ax2.legend(loc=1)
+
+    plt.grid(True)
+
+    #  p1 = temp_col.plot(lw=1.5,label='volumn')
+    #  plt.legend(loc=2)
+    #  plt.axis('tight')
+    #  plt.xlabel('time')
+    #  plt.ylabel('volumn')
+    #
+    #  p2 = close_data.plot(lw=1.5,label='close')
+    #  #  plt.plot(close_data, 'g',lw=1.5, label='close')
+    #  plt.legend(loc=1)
+    #  plt.ylabel('close')
+    plt.title(company_combox.GetStringSelection(),fontproperties=myfont)
+    plt.savefig("./"+sh_code+"/"+company_combox.GetStringSelection()+'.png')
+
+    contents.AppendText(company_combox.GetStringSelection()+"----画图成功!\n")
+
+
+if __name__ == '__main__':
 
     app = wx.App()
 
@@ -482,6 +610,19 @@ if __name__ == '__main__':
 
     ui_label4 = wx.StaticText(win, label = "操作记录", pos = (300,140))
     contents = wx.TextCtrl(win,pos=(300,170),size=(390,200),style=rt.RE_READONLY | wx.TE_MULTILINE)
+
+    ui_label5 = wx.StaticText(win, label = "选择股票", pos = (80,400))
+    symbol_combox = wx.ComboBox(win,pos=(80,450))
+    symbol_combox.Bind(wx.EVT_COMBOBOX,select_symbol)
+
+    ui_label6 = wx.StaticText(win, label = "选择需要画图公司", pos = (300,400))
+    company_combox = wx.ComboBox(win, pos = (300,450),size=(150,40))
+    company_combox.Bind(wx.EVT_COMBOBOX,select_company)
+
+    company_button = wx.Button(win,label='画图',pos=(500,450),size=(60,45))
+    company_button.Bind(wx.EVT_BUTTON,plot_company)
+
+    init_symbol_combox()
     global_trade_cal = init()
 
     win.Show()

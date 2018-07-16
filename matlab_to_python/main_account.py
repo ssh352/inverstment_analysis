@@ -16,7 +16,7 @@
 a=max( original_data(end-100:end,2) ); b = min( original_data(end-100:end,3) );disp([a,b,2*(a-b)/(a+b)] )
 str_path = 'C:\Users\Administratori\Documents\MATLAB\Data\Stock\result_';
 stock_code = '300178'; DispFundamentalInfo(stock_code); CalHighAndLow(stock_code,'Stock');file_name = [str_path,stock_code,'.mat'];load(file_name); disp(all_static_data{7});
-str1=['D:\SpecialDate\',stock_code(1:6)]; WriteSpecialDate([str1,'middle.txt'],middle_cell_data);WriteSpecialDate([str1,'long.txt'],long_cell_data);#disp(all_static_data{3})
+str1=['D:\SpecialDate\\',stock_code(1:6)]; WriteSpecialDate([str1,'middle.txt'],middle_cell_data);WriteSpecialDate([str1,'long.txt'],long_cell_data);#disp(all_static_data{3})
 # 就历史资料来看，目前的中期趋势如何？道氏理论对目前的行情有何看法？是否存在背离的现象？成交量是否有明显的变化？行情宽度是否配合趋势的发展？
 # 长期趋势如何？他是处于上升趋势、下降趋势、窄幅盘整还是正在变化中？就历史资料来看，目前长期趋势的期限与幅度如何？它是处于初期、末期还是中间阶段？
 row = size(original_time,1); disp(all_static_data{5}); disp(all_static_data{6}); disp(all_static_data{8}); disp(all_static_data{9});  ChangeAttentionStock(stock_code,'w');

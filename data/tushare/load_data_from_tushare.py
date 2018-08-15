@@ -18,6 +18,7 @@ from progressbar import *
 import datetime
 import codecs
 import json
+import errno
 
 
 warnings.filterwarnings('ignore')
@@ -152,7 +153,7 @@ if __name__ == '__main__':
     config_path = "tushare_config.json"
     config_dict = read_json(config_path)
 
-    dir_name = config_dict.get('dirname', '/home/zhangkai/')
+    dir_name = config_dict.get('dirname', '/home/zhangkai/data/tushare')
     basics_name = config_dict.get('basics_hdf', 'basics.h5')
     stock_name = config_dict.get('day_stock_hdf', 'day_stock.h5')
     already_load = config_dict.get('already_load', {})

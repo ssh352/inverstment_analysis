@@ -20,7 +20,6 @@ import codecs
 import json
 import errno
 
-
 warnings.filterwarnings('ignore')
 
 def save_json(serializable, file_name):
@@ -158,4 +157,6 @@ if __name__ == '__main__':
     stock_name = config_dict.get('day_stock_hdf', 'day_stock.h5')
     already_load = config_dict.get('already_load', {})
     last_date = config_dict.get('last_date', '1900-01-01')
+
+    load_data()
 

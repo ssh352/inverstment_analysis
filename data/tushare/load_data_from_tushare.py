@@ -12,15 +12,70 @@ history:
 """
 import tushare as ts
 import pandas as pd
-import jaqs.util as jutil
 import os
 import warnings
-import progressbar
+from progressbar import *
 import datetime
+import codecs
+import json
 
 
 warnings.filterwarnings('ignore')
 
+def save_json(serializable, file_name):
+    """
+    Save an serializable object to JSON file.
+
+    Parameters
+    ----------
+    serializable : object
+    file_name : str
+
+    """
+    fn = os.path.abspath(file_name)
+    create_dir(fn)
+    
+    with codecs.open(fn, 'w', encoding='utf-8') as f:
+        json.dump(serializable, f, separators=(',\n', ': '))
+
+def read_json(fp):
+    """
+    Read JSON file to dict. Return None if file not found.
+
+    Parameters
+    ----------
+    fp : str
+        Path of the JSON file.
+
+    Returns
+    -------
+    dict
+
+    """
+    content = dict()
+    try:
+        with codecs.open(fp, 'r', encoding='utf-8') as f:
+            content = json.load(f)
+    except IOError as e:
+        if e.errno not in (errno.ENOENT, errno.EISDIR, errno.EINVAL):
+            raise
+    return content
+
+def create_dir(filename):
+    """
+    Create dir if directory of filename does not exist.
+
+    Parameters
+    ----------
+    filename : str
+
+    """
+    if not os.path.exists(os.path.dirname(filename)):
+        try:
+            os.makedirs(os.path.dirname(filename))
+        except OSError as exc:  # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
 
 def load_data():
     """
@@ -35,7 +90,7 @@ def load_data():
         print "data is the latest!"
         return
 
-    jutil.create_dir(os.path.join(dir_name, basics_name))
+    create_dir(os.path.join(dir_name, basics_name))
     stock_basics = ts.get_stock_basics()
     stock_basics = stock_basics[stock_basics['timeToMarket'] > 19000000]
     stock_basics.to_hdf(
@@ -51,7 +106,12 @@ def load_data():
     day_store = pd.HDFStore(os.path.join(dir_name, stock_name))
     time_delta = datetime.timedelta(1)
 
-    for i in progressbar.progressbar(range(len(stock_basics))):
+    widgets = ['Progress: ',Percentage(), ' ', Bar('#'),' ', Timer(),
+                         ' ', ETA(), ' ', FileTransferSpeed()]
+
+    progress = ProgressBar(widgets=widgets)
+
+    for i in progress(range(len(stock_basics))):
         temp_code = code_index[i]
 
         if temp_code in already_load:
@@ -78,22 +138,23 @@ def load_data():
 
         already_load[temp_code] = temp_df.iat[-1, 0]
         day_store[temp_code] = pd.concat([temp_data,temp_df])
+        #  print temp_code + " update!"
 
     config_dict['already_load'] = already_load
     config_dict['last_date'] = tushare_last_date
-    jutil.save_json(config_dict, config_path)
+    save_json(config_dict, config_path)
     day_store.close()
     print "last date to %s!" % tushare_last_date
 
 
 if __name__ == '__main__':
-    config_path = r"../config/tushare_config.json"
-    config_dict = jutil.read_json(config_path)
 
-    dir_name = config_dict.get('dirname', '~')
+    config_path = "tushare_config.json"
+    config_dict = read_json(config_path)
+
+    dir_name = config_dict.get('dirname', '/home/zhangkai/')
     basics_name = config_dict.get('basics_hdf', 'basics.h5')
     stock_name = config_dict.get('day_stock_hdf', 'day_stock.h5')
     already_load = config_dict.get('already_load', {})
     last_date = config_dict.get('last_date', '1900-01-01')
 
-    load_data()

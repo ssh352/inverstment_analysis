@@ -146,13 +146,32 @@ def load_data():
     day_store.close()
     print "last date to %s!" % tushare_last_date
 
+def h5tomysql():
+    '''
+    将数据从h5格式存储到mysql当中
+    '''
+    pass
+
+def h5tomongo():
+    '''
+    将数据从h5存储到mongodb中
+    '''
+    pass
+
 
 if __name__ == '__main__':
+
+    #  mysqlclient = pymysql.Connect(
+    #      host = 'localhost',
+    #      port = 3306,
+    #      user = 'root',
+    #      passwd = 'guosen'
+    #  )
 
     config_path = "tushare_config.json"
     config_dict = read_json(config_path)
 
-    dir_name = config_dict.get('dirname', '/home/zhangkai/data/tushare')
+    dir_name = config_dict.get('dirname', '/home/data/tushare')
     basics_name = config_dict.get('basics_hdf', 'basics.h5')
     stock_name = config_dict.get('day_stock_hdf', 'day_stock.h5')
     already_load = config_dict.get('already_load', {})
